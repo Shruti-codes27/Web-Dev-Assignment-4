@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Connect - Real-Time Chat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f172a;
+            color: #f1f5f9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 650px;
+            background: #1e293b;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+        header {
+            background: #0f172a;
+            padding: 16px 20px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 {
+            font-size: 1.15rem;
+            color: #38bdf8;
+            font-weight: 600;
+        }
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            background: #10b98122;
+            color: #34d399;
+            border: 1px solid #059669;
+        }
+        .controls {
+            padding: 14px 20px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        input, button {
+            padding: 9px 14px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            border: 1px solid #475569;
+            outline: none;
+            background: #0f172a;
+            color: #f8fafc;
+        }
+        input:focus { border-color: #38bdf8; }
+        button {
+            background: #0284c7;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.15s;
+        }
+        button:hover { background: #0369a1; }
+        #chat-box {
+            height: 380px;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #0f172a88;
+        }
+        .message {
+            padding: 8px 14px;
+            border-radius: 8px;
+            max-width: 80%;
+            font-size: 0.92rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .message.received {
+            background: #334155;
+            align-self: flex-start;
+        }
+        .message.sent {
+            background: #0284c7;
+            align-self: flex-end;
+        }
+        .message.system {
+            background: transparent;
+            color: #94a3b8;
+            font-style: italic;
+            font-size: 0.8rem;
+            align-self: center;
+        }
+        .message .meta {
+            font-size: 0.72rem;
+            color: #cbd5e1;
+            margin-bottom: 3px;
+            font-weight: 600;
+        }
+        form.message-form {
+            display: flex;
+            padding: 14px 20px;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            gap: 10px;
+        }
+        form.message-form input { flex: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💬 Secure Connect Chat</h1>
+            <div id="status" class="status-badge">Connected</div>
+        </header>
+
+        <div class="controls">
+            <input type="text" id="username" placeholder="Your name (e.g. Aditi)" value="Aditi" style="width: 140px;">
+            <input type="text" id="room" placeholder="Room" value="general" style="width: 110px;">
+            <button id="join-btn" onclick="joinSelectedRoom()">Join Room</button>
+        </div>
+
+        <div id="chat-box">
+            <div class="message system">Welcome to Secure Connect Chat. Enter a room and start chatting!</div>
+        </div>
+
+        <form class="message-form" onsubmit="sendMessage(event)">
+            <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <!-- Automatically served by Socket.IO server -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const chatBox = document.getElementById("chat-box");
+        const statusBadge = document.getElementById("status");
+
+        socket.on("connect", () => {
+            statusBadge.innerText = `Connected (${socket.id})`;
+            statusBadge.style.color = "#34d399";
+            joinSelectedRoom();
+        });
+
+        socket.on("disconnect", () => {
+            statusBadge.innerText = "Disconnected";
+            statusBadge.style.color = "#f87171";
+        });
+
+        function joinSelectedRoom() {
+            const room = document.getElementById("room").value.trim() || "general";
+            const username = document.getElementById("username").value.trim() || "User";
+            socket.emit("joinRoom", { room, username });
+            appendMessage(`Joined room "${room}" as ${username}`, "system");
+        }
+
+        function sendMessage(e) {
+            e.preventDefault();
+            const input = document.getElementById("msg-input");
+            const message = input.value.trim();
+            const room = document.getElementById("room").value.trim() || "general";
+            const username = document.getElementById("username").value.trim() || "User";
+
+            if (!message) return;
+
+            socket.emit("sendMessage", { room, message, username });
+            input.value = "";
+        }
+
+        socket.on("receiveMessage", (data) => {
+            const currentUsername = document.getElementById("username").value.trim();
+            const isMe = data.username === currentUsername;
+            appendMessage(data.message, isMe ? "sent" : "received", data.username);
+        });
+
+        function appendMessage(text, type, sender = "") {
+            const div = document.createElement("div");
+            div.className = `message ${type}`;
+
+            if (sender && type !== "system") {
+                const meta = document.createElement("div");
+                meta.className = "meta";
+                meta.innerText = sender;
+                div.appendChild(meta);
+            }
+
+            const body = document.createElement("div");
+            body.innerText = text;
+            div.appendChild(body);
+
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
